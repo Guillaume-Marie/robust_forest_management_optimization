@@ -60,7 +60,7 @@ import sys
 import os
 import re
 import matplotlib.pyplot as plt
-
+import matplotlib.colors as mcolors
 import rioxarray
 from rasterstats import zonal_stats
 import geopandas as gpd
@@ -75,21 +75,29 @@ YEAR_MIN = 2089
 YEAR_MAX = 2099
 FILE_PATTERN = "{simulation}_{year}0101_{year}1231_1Y_stomate_history.nc"
 
+
+# Part A
 VARIABLES_INFO = {
     "TOTAL_SOIL_c": ("benefit", 1.0),
     "NBP_pool_c"   : ("benefit", 1.0),
 }
-
 AGGREGATION_MODES = {
     "TOTAL_SOIL_c": "mean",
     "NBP_pool_c"  : "mean",
 }
-
 BAU_KEYWORD = "BAU"
-
 OUTPUT_SELECTED_NC = "Fout_CSF_selected_robust.nc"
+
+# Part B
 OUTPUT_PNG = "Fout_CSF_selected_robust.png"
 
+# Part C
+SHAPEFILE = "enz_v8_4326.shp"
+SHAPE_ZONE_ID = "EnZ_name"
+VAR_NAME = "CSF_selected"
+OUTPUT_TIF = "Fout_CSF_selected_robust.tif"
+OUTPUT_TIF_4326 = "Fout_CSF_selected_robust_4326.tif"
+OUTPUT_CSV = "climate_zones_top3_csf.csv"
 
 def parse_mgmt_and_ssp(sim_name):
     """
@@ -330,8 +338,6 @@ def visualize_named_map(nc_file=OUTPUT_SELECTED_NC, id_to_name=None, png_file=OU
         print("No valid IDs in CSF_selected. Nothing to plot.")
         return
 
-    import matplotlib.colors as mcolors
-
     max_id = used_ids.max()
     ncat = max_id if max_id > 0 else 1
 
@@ -365,13 +371,6 @@ def visualize_named_map(nc_file=OUTPUT_SELECTED_NC, id_to_name=None, png_file=OU
 # --------------------------------------------------------------------------------
 # Zonal stats integration
 # --------------------------------------------------------------------------------
-
-SHAPEFILE = "enz_v8_4326.shp"
-SHAPE_ZONE_ID = "EnZ_name"
-VAR_NAME = "CSF_selected"
-OUTPUT_TIF = "Fout_CSF_selected_robust.tif"
-OUTPUT_TIF_4326 = "Fout_CSF_selected_robust_4326.tif"
-OUTPUT_CSV = "climate_zones_top3_csf.csv"
 
 def do_zonal_stats(shapefile, netcdf_file, varname,
                    id_to_name, zone_id_field=SHAPE_ZONE_ID,
