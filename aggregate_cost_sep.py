@@ -139,9 +139,9 @@ def main():
         print(f"Saved normalized aggregated data to {output_csv}")
 
     # Export NetCDF
-    ds_final = big_df.set_index(["mgmt","ssp","lat","lon"]).to_xarray()
-    ds_final.to_netcdf("multicriteria_data_normalized.nc")
-    print("Saved normalized data to multicriteria_data_normalized.nc")
+    #ds_final = big_df.set_index(["mgmt","ssp","lat","lon"]).to_xarray()
+    #ds_final.to_netcdf("multicriteria_data_normalized.nc")
+    #print("Saved normalized data to multicriteria_data_normalized.nc")
 
 
 if __name__ == "__main__":
