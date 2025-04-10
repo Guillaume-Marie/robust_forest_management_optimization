@@ -1,28 +1,13 @@
 #!/usr/bin/env python3
 """
-plot_and_check.py
-=================
+plot_and_check_v2.py
+====================
 
-Ce script lit une liste de simulations dans un fichier texte,
-charge pour chacune un Dataset NetCDF (concaténation annuelle + agrégation sur lat/lon...),
-puis produit un graphe à n panneaux (un par variable),
-ET un panneau (subplot) séparé à droite pour la légende.
-
-Inspiré de check_outputs_with_agg.py, 
-avec un gridspec pour afficher la légende dans un subplot distinct.
+Version modifiée pour différencier certains types d'expériences (BAU, FM1, FM5)
+en utilisant des styles de lignes distincts.
 
 Usage:
-  python plot_and_check.py list_of_sims.txt
-
-Exemple de "list_of_sims.txt":
-  BAUSSP126
-  FM5SSP126
-  FM1SSP126
-
-Le script suppose que tu disposes d'un ensemble de fichiers NetCDF
-pour chaque simulation, nommés ainsi:
-  {simulation}_{year}0101_{year}1231_1Y_stomate_history.nc
-entre ANNEE_MIN..ANNEE_MAX.
+  python plot_and_check_v2.py list_of_sims.txt
 """
 
 import xarray as xr
@@ -37,8 +22,8 @@ import os
 # ---------------------
 
 BASE_PATH = "/home/mguill/Documents/output_CSF_v2"
-ANNEE_MIN = 2010
-ANNEE_MAX = 2099
+ANNEE_MIN = 2030
+ANNEE_MAX = 2080
 FILE_PATTERN = "{simulation}_{year}0101_{year}1231_1Y_stomate_history.nc"
 
 # Variables à tracer, et leur mode d'agrégation
@@ -48,7 +33,6 @@ VARIABLES_INFO = {
     "GPP"          : ("benefit", 1.0),
     "NPP"          : ("benefit", 1.0),    
     "LAI_MAX"      : ("benefit", 1.0),
-    "FOREST_MANAGED": ("benefit", 1.0),
     "RDI"          : ("benefit", 1.0)
 }
 AGGREGATION_MODES = {
@@ -57,27 +41,57 @@ AGGREGATION_MODES = {
     "GPP"          : "mean",
     "NPP"          : "mean",
     "LAI_MAX"      : "mean",
-    "FOREST_MANAGED":"max",
     "RDI"          : "mean",
 }
 
-# Dimensions spatiales qu'on veut moyenner
+TEMPORAL_MODES = {
+    "NBP_pool_c"   : "cumsum",
+    "TOTAL_SOIL_c" : "none",
+    "GPP"          : "cumsum",
+    "NPP"          : "cumsum",
+    "LAI_MAX"      : "none",
+    "RDI"          : "none",
+}
+
 SPATIAL_DIMS = ["lat","lon"]
-VEGET_ID = 4
+VEGET_ID = 8
 TIME_DIM = "time_counter"
 BASE_YEAR = ANNEE_MIN
 
-OUTPUT_PNG = "plot_and_check_legend_separated.png"
+OUTPUT_PNG = (
+    "plot_and_check_legend_PFT"
+    + str(VEGET_ID) + "_"
+    + str(ANNEE_MIN) + "_"
+    + str(ANNEE_MAX)
+    + ".png"
+)
 
 # ---------------------
-# FONCTION D'AGRÉGATION
+# NOUVELLE FONCTION
+# ---------------------
+def get_line_style(sim_name):
+    """
+    Détermine le style de ligne en fonction du nom de la simulation.
+    Vous pouvez ajuster les conditions et les styles ci-dessous
+    (solid='-', dashed='--', dotted=':', dashdot='-.').
+    """
+    name_upper = sim_name.upper()
+    if "BAU" in name_upper:
+        return "-"   # trait plein
+    elif "FM1" in name_upper:
+        return "--"  # tirets
+    elif "FM5" in name_upper:
+        return ":"   # pointillés
+    else:
+        return "-."  # tirets-pointillés (par défaut pour les autres)
+
 # ---------------------
 def load_and_aggregate_timeseries(sim_name):
     """
     Pour la simulation `sim_name` (ex: "BAUSSP126"), on concatène
     les fichiers annuels de ANNEE_MIN à ANNEE_MAX et on agrège en
     moyennant (ou sommant) les dims spatiales (SPATIAL_DIMS).
-    On conserve la dimension TIME_DIM pour tracer l'évolution dans le temps.
+    On conserve la dimension TIME_DIM pour tracer l’évolution dans le temps.
     Retourne un Dataset contenant chaque variable de VARIABLES_INFO
     sous forme 1D (time_counter).
     """
@@ -102,11 +116,9 @@ def load_and_aggregate_timeseries(sim_name):
             continue
         arr = ds_concat[var_name]
 
-                # 1) Sélection sur veget
+        # Sélection sur veget, si nécessaire
         if "veget" in arr.dims:
-            # On suppose que la coord veget va de 1 à 17
             arr = arr.sel(veget=VEGET_ID)
-
 
         # Agrégation spatiale
         agg_mode = AGGREGATION_MODES.get(var_name, "mean")
@@ -119,18 +131,19 @@ def load_and_aggregate_timeseries(sim_name):
         elif agg_mode == "max":
             arr_agg = arr.max(dim=dims_to_agg)
         elif agg_mode == "min":
-            arr_agg = arr.min(dim=dims_to_agg)           
+            arr_agg = arr.min(dim=dims_to_agg)
+        else:
+            arr_agg = arr.mean(dim=dims_to_agg)
+
         data_vars[var_name] = arr_agg
 
     ds_out = xr.Dataset(data_vars)
     return ds_out
 
 # ---------------------
-# SCRIPT PRINCIPAL
-# ---------------------
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python plot_and_check.py list_of_sims.txt")
+        print("Usage: python plot_and_check_v2.py list_of_sims.txt")
         sys.exit(1)
 
     list_file = sys.argv[1]
@@ -154,11 +167,11 @@ def main():
         print("Aucune simulation valide chargée. Abandon.")
         sys.exit(1)
 
-    # Liste des variables qu'on veut tracer
+    # Liste des variables qu’on veut tracer
     all_vars = list(VARIABLES_INFO.keys())
     nvars = len(all_vars)
 
-    # Création d'une figure avec un gridspec => 2 colonnes :
+    # Création d’une figure avec un gridspec => 2 colonnes :
     #  1) la gauche pour nos n sous-graphiques
     #  2) la droite pour la légende
     fig = plt.figure(figsize=(10, 3*nvars))
@@ -166,7 +179,6 @@ def main():
 
     axes = []
     for i in range(nvars):
-        # Sous-graphe i en colonne 0
         ax = fig.add_subplot(gs[i, 0])
         axes.append(ax)
 
@@ -174,7 +186,6 @@ def main():
     legend_ax = fig.add_subplot(gs[:, 1])
     legend_ax.axis('off')  # pas de cadre ni graduation
 
-    # On va stocker tous les handles/labels pour la légende
     all_handles = []
     all_labels = []
 
@@ -190,50 +201,42 @@ def main():
             if var_name not in ds_agg:
                 continue
 
-            arr_var = ds_agg[var_name]
-
-            # Récupération du temps (dimension TIME_DIM)
-            # Suppose qu'on indexe juste 0..N-1
-            N = arr_var.sizes.get(TIME_DIM, 0)
+            arr_var = ds_agg[var_name].values
+            agg_mode = TEMPORAL_MODES.get(var_name, "none")
+            N = ds_agg[var_name].sizes.get(TIME_DIM, 0)
             time_index = np.arange(N)
-            # ou si tu veux : years = BASE_YEAR + time_index
-            # c'est toi qui vois
             years = BASE_YEAR + time_index
 
-            yvals = arr_var.values
-            # Vérifier la cohérence
-            if len(years) != len(yvals):
-                print(f"Attention, mismatch x={len(years)} y={len(yvals)} pour {sim_name} - {var_name}.")
-                continue
+            # Calcul cumsum si besoin
+            if agg_mode == "cumsum":
+                arr_var = np.cumsum(arr_var)
 
-            line, = ax.plot(years, yvals, label=sim_name)
+            # Choix du style de ligne
+            ls = get_line_style(sim_name)
+
+            line, = ax.plot(years, arr_var, label=sim_name, linestyle=ls)
         
         ax.set_ylabel(var_name)
 
     # --------------------------------------------------------------------
-    # RÉCUPÉRER LES HANDLES/LABELS DE TOUS LES AXES
-    # pour pouvoir afficher UNE légende commune
+    # Récupérer les handles/labels pour la légende commune
     # --------------------------------------------------------------------
     for ax in axes:
         handles, labels = ax.get_legend_handles_labels()
         all_handles.extend(handles)
         all_labels.extend(labels)
 
-    # On crée un dict (label -> handle) pour éliminer doublons si besoin
-    # (ex: si la même simulation s'affiche sur plusieurs subplots)
+    # Éventuellement on peut supprimer les doublons
     combined = {}
     for h, l in zip(all_handles, all_labels):
         combined[l] = h
-    # On re-sépare
     unique_handles = list(combined.values())
     unique_labels  = list(combined.keys())
 
-    # --------------------------------------------------------------------
-    # AFFICHE LA LÉGENDE DANS legend_ax
-    # --------------------------------------------------------------------
+    # Légende unique
     legend_ax.legend(unique_handles, unique_labels, loc='center')
 
-    axes[-1].set_xlabel("Index du temps (time_counter + BASE_YEAR)")
+    axes[-1].set_xlabel("Années (BASE_YEAR + index)")
 
     plt.tight_layout()
     plt.savefig(OUTPUT_PNG, dpi=150)
